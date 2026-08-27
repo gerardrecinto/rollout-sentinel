@@ -27,6 +27,13 @@ for rollout-sentinel (a progressive delivery and canary SLO verification CLI in 
 
 Review the diff, not the whole repository. Only flag issues that the diff introduces or modifies.
 
+Score the diff:
+- technical_debt_score (0-100, 0 = spotless clean, 100 = critical debt): weigh cyclomatic complexity, \
+concurrency hazards (goroutine leaks, data races, unbuffered channel deadlocks, context propagation), \
+missing test coverage for new logic, resource leaks, and unhandled errors.
+- confidence (0-100): your confidence percentage in this assessment.
+- self_reported_risk_low / self_reported_risk_high (0-100): uncertainty bounds around the technical debt score.
+
 Focus on:
 1. Concurrency safety: goroutine leaks, data races, unbuffered channel deadlocks, context.Context propagation.
 2. Error handling: explicit error checks, no ignored errors, proper error wrapping (%w).
@@ -53,8 +60,10 @@ class Violation(BaseModel):
 
 
 class PRReview(BaseModel):
-    quality_score: int = Field(ge=0, le=100, description="Overall code quality score (100 = flawless)")
-    confidence: int = Field(ge=0, le=100)
+    technical_debt_score: int = Field(ge=0, le=100, description="Technical debt score (0-100, 0 = clean, 100 = heavy debt)")
+    confidence: int = Field(ge=0, le=100, description="Confidence percentage in assessment (0-100%)")
+    self_reported_risk_low: int = Field(ge=0, le=100, description="Lower bound uncertainty")
+    self_reported_risk_high: int = Field(ge=0, le=100, description="Upper bound uncertainty")
     summary: str
     violations: list[Violation]
 
@@ -75,7 +84,7 @@ def render_comment(review: PRReview, pr_number: int, commit_sha: str) -> str:
     lines = [
         COMMENT_MARKER,
         "## Automated Code Review & Suggestions",
-        f"**Quality Score:** `{review.quality_score}/100` | **Confidence:** `{review.confidence}%` | **Commit:** `{commit_sha[:7]}`",
+        f"**Technical Debt Score:** `{review.technical_debt_score}/100` | **Confidence:** `{review.confidence}%` | **Risk Range:** `{review.self_reported_risk_low}-{review.self_reported_risk_high}%` | **Commit:** `{commit_sha[:7]}`",
         "",
         review.summary,
         "",
