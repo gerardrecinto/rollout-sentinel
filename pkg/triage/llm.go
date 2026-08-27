@@ -39,7 +39,7 @@ type LLMClient interface {
 // BuildPrompt constructs a high-density, grounded prompt for the LLM.
 func BuildPrompt(req LLMTriageRequest) string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("You are an expert Apple-grade Site Reliability and Release Engineer triaging a progressive canary deployment anomaly for service '%s' in namespace '%s'.\n\n", req.ServiceName, req.Namespace))
+	sb.WriteString(fmt.Sprintf("You are a senior site reliability and release engineer triaging a progressive canary deployment anomaly for service '%s' in namespace '%s'.\n\n", req.ServiceName, req.Namespace))
 	sb.WriteString(fmt.Sprintf("CANARY VERSION: %s | BASELINE: %s\n\n", req.CanaryVersion, req.BaselineVersion))
 
 	if req.CanaryMetrics != nil {

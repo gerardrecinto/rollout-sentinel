@@ -14,7 +14,7 @@ import (
 	"github.com/gerardrecinto/rollout-sentinel/pkg/triage"
 )
 
-const Version = "v1.4.2"
+var Version = "v1.1.0"
 
 func main() {
 	if len(os.Args) < 2 {
