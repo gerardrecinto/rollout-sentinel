@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="460" height="80" viewBox="0 0 460 80">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#38bdf8;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#818cf8;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <!-- Sentinel Shield Badge -->
+  <rect x="8" y="12" width="56" height="56" rx="14" fill="#0f172a" stroke="#38bdf8" stroke-width="2"/>
+  <text x="36" y="40" font-family="SF Mono, Menlo, monospace" font-size="16" fill="#38bdf8" text-anchor="middle" font-weight="700">RS</text>
+  <text x="36" y="57" font-family="SF Mono, Menlo, monospace" font-size="9" fill="#818cf8" text-anchor="middle" font-weight="600">k8s</text>
+  <!-- Name -->
+  <text x="80" y="38" font-family="-apple-system, 'Helvetica Neue', sans-serif" font-size="30" font-weight="700" fill="url(#grad)">rollout-sentinel</text>
+  <!-- Tagline -->
+  <text x="80" y="60" font-family="-apple-system, 'Helvetica Neue', sans-serif" font-size="14" fill="#64748b">Canary SLO Verification &amp; Auto-Rollback Engine</text>
+</svg>
