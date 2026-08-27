@@ -1,0 +1,30 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: rollout-sentinel-canary-gate
+  namespace: production
+spec:
+  metrics:
+    - name: error-rate-and-latency-slo
+      interval: 30s
+      successCondition: result[0] == "PASS" || result[0] == "WARN"
+      failureLimit: 1
+      provider:
+        job:
+          spec:
+            template:
+              spec:
+                containers:
+                  - name: sentinel-check
+                    image: ghcr.io/gerardrecinto/rollout-sentinel:latest
+                    imagePullPolicy: IfNotPresent
+                    args:
+                      - check
+                      - --service
+                      - retail-checkout-api
+                      - --namespace
+                      - production
+                      - --weight
+                      - "{{args.canary-weight}}"
+                restartPolicy: Never
+            backoffLimit: 0

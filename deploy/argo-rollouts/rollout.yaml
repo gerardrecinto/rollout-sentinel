@@ -1,0 +1,59 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: retail-checkout-api
+  namespace: production
+  labels:
+    app: retail-checkout-api
+spec:
+  replicas: 10
+  strategy:
+    canary:
+      analysis:
+        templates:
+          - templateName: rollout-sentinel-canary-gate
+        args:
+          - name: canary-weight
+            valueFrom:
+              canary: {}
+      steps:
+        - setWeight: 10
+        - pause: { duration: 60s }
+        - setWeight: 20
+        - pause: { duration: 60s }
+        - setWeight: 50
+        - pause: { duration: 120s }
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: retail-checkout-api
+  template:
+    metadata:
+      labels:
+        app: retail-checkout-api
+    spec:
+      containers:
+        - name: retail-checkout-api
+          image: retail-checkout-api:v2.14.0
+          ports:
+            - name: http
+              containerPort: 8080
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 15

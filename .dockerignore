@@ -1,0 +1,7 @@
+.git
+.github
+bin
+assets
+docs
+*.md
+*.tar.gz

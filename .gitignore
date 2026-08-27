@@ -1,0 +1,12 @@
+# Binaries
+bin/
+dist/
+*.tar.gz
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test artifacts
+coverage.txt
+*.out
