@@ -14,6 +14,7 @@ jobs:
     permissions:
       contents: write
       packages: write
+      id-token: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -61,6 +62,7 @@ jobs:
           cd ..
 
       - name: Build and Push Multi-Arch Container Image
+        id: build
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -69,6 +71,19 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository }}:latest
             ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign the image (keyless, tied to this workflow's OIDC identity)
+        run: cosign sign --yes "ghcr.io/${{ github.repository }}@${{ steps.build.outputs.digest }}"
+
+      - name: Verify the signature we just wrote
+        run: |
+          cosign verify \
+            --certificate-identity-regexp "^https://github.com/${{ github.repository }}/.github/workflows/release.yml@.*" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "ghcr.io/${{ github.repository }}@${{ steps.build.outputs.digest }}"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
