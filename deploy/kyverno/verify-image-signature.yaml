@@ -1,0 +1,27 @@
+# Blocks any rollout-sentinel image from scheduling unless it carries a
+# valid keyless Cosign signature from this repo's own release workflow.
+# Pairs with the sign + verify steps in .github/workflows/release.yml:
+# CI signs the image on push, this policy re-verifies at admission time
+# so the two checks are independent, not the same trust decision twice.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: verify-rollout-sentinel-image-signature
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: check-image-signature
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      verifyImages:
+        - imageReferences:
+            - "ghcr.io/gerardrecinto/rollout-sentinel*"
+          attestors:
+            - entries:
+                - keyless:
+                    subjectRegExp: "^https://github.com/gerardrecinto/rollout-sentinel/.github/workflows/release.yml@.*"
+                    issuer: "https://token.actions.githubusercontent.com"

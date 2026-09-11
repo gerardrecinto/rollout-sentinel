@@ -164,6 +164,9 @@ Manifests are located in `deploy/`:
 - `deploy/argocd/application.yaml`: ArgoCD Application CRD with automated self-healing and pruning.
 - `deploy/argo-rollouts/analysis-template.yaml`: AnalysisTemplate running `rollout-sentinel check` at each traffic step.
 - `deploy/argo-rollouts/rollout.yaml`: Argo Rollout with canary step progression (10% -> 20% -> 50% -> 100%).
+- `deploy/kyverno/verify-image-signature.yaml`: Kyverno ClusterPolicy that blocks any pod using a `rollout-sentinel` image unless it carries a valid keyless Cosign signature from this repo's own release workflow.
+
+Every image gets signed in `.github/workflows/release.yml` right after it's pushed to `ghcr.io`, keyless, tied to the workflow's own GitHub Actions OIDC identity, no signing key to manage or leak. The same workflow re-verifies the signature it just wrote before calling the job done. The Kyverno policy above does the same check again, independently, at the cluster's admission boundary, so a signed-but-later-tampered image, or an image pushed by anything other than this exact release workflow, gets refused at schedule time even if it somehow made it past CI.
 
 Apply to cluster:
 ```bash
