@@ -11,6 +11,7 @@ import (
 	"github.com/gerardrecinto/rollout-sentinel/pkg/analyzer"
 	"github.com/gerardrecinto/rollout-sentinel/pkg/client"
 	"github.com/gerardrecinto/rollout-sentinel/pkg/config"
+	"github.com/gerardrecinto/rollout-sentinel/pkg/notify"
 	"github.com/gerardrecinto/rollout-sentinel/pkg/triage"
 )
 
@@ -61,6 +62,7 @@ func runCheck(args []string) {
 	namespace := fs.String("namespace", "production", "Target Kubernetes namespace")
 	weight := fs.Int("weight", 10, "Current canary traffic weight percent")
 	jsonOutput := fs.Bool("json", false, "Output results in JSON format")
+	natsURL := fs.String("nats-url", "", "NATS server URL to publish step/rollback events to (disabled if empty)")
 	_ = fs.Parse(args)
 
 	cfg := config.DefaultConfig()
@@ -72,6 +74,10 @@ func runCheck(args []string) {
 	llmMock := &triage.MockLLMClient{}
 
 	ctrl := analyzer.NewController(cfg, k8sMock, metricsMock, llmMock)
+	publisher, closePublisher := setupPublisher(*natsURL)
+	defer closePublisher()
+	ctrl.SetPublisher(publisher)
+
 	res, err := ctrl.RunStepAnalysis(context.Background(), *weight)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error during evaluation: %v\n", err)
@@ -92,6 +98,7 @@ func runMonitor(args []string) {
 	service := fs.String("service", "retail-checkout-api", "Target Kubernetes service name")
 	namespace := fs.String("namespace", "production", "Target Kubernetes namespace")
 	maxSteps := fs.Int("steps", 3, "Maximum canary progression steps to simulate")
+	natsURL := fs.String("nats-url", "", "NATS server URL to publish step/rollback events to (disabled if empty)")
 	_ = fs.Parse(args)
 
 	cfg := config.DefaultConfig()
@@ -103,6 +110,9 @@ func runMonitor(args []string) {
 	llmMock := &triage.MockLLMClient{}
 
 	ctrl := analyzer.NewController(cfg, k8sMock, metricsMock, llmMock)
+	publisher, closePublisher := setupPublisher(*natsURL)
+	defer closePublisher()
+	ctrl.SetPublisher(publisher)
 
 	currentWeight := 10
 	for step := 1; step <= *maxSteps; step++ {
@@ -125,6 +135,27 @@ func runMonitor(args []string) {
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+// setupPublisher connects to NATS when natsURL is non-empty and returns the
+// resulting publisher plus a cleanup func to defer. When natsURL is empty
+// (the default) it returns notify.NoopPublisher and a no-op cleanup, so the
+// CLI's behavior is unchanged unless -nats-url is explicitly passed.
+func setupPublisher(natsURL string) (notify.EventPublisher, func()) {
+	if natsURL == "" {
+		return notify.NoopPublisher{}, func() {}
+	}
+	pub, err := notify.NewNATSPublisher(natsURL)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error connecting to NATS at %s: %v\n", natsURL, err)
+		os.Exit(1)
+	}
+	fmt.Printf("[notify] publishing step/rollback events to %s\n", natsURL)
+	return pub, func() {
+		if closeErr := pub.Close(); closeErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed closing NATS connection: %v\n", closeErr)
+		}
 	}
 }
 

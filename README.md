@@ -23,6 +23,7 @@ Progressive delivery and canary health evaluation CLI for Kubernetes and Prometh
 - Halts traffic promotion and triggers automated rollback within 2 minutes of consecutive SLA breaches.
 - Deterministic fast-path failure classifier for exit code 137 OOMKilled, CrashLoopBackOff, ImagePullBackOff, and probe timeouts (&lt; 0.4ms execution latency).
 - LLM incident triage engine that correlates Kubernetes pod events, container stderr logs, and Prometheus metrics diffs to generate actionable hypotheses and immediate runbook remediation steps.
+- Optional NATS event publisher so a dashboard, alerting bot, or anything else subscribing can watch step verdicts and rollback triggers land in real time, instead of only reading stdout.
 
 ---
 
@@ -140,6 +141,70 @@ rollout-sentinel monitor --service retail-checkout-api --namespace production --
 ```bash
 rollout-sentinel triage --pod retail-checkout-api-canary-7f8d-x9 --reason OOMKilled --exit-code 137
 ```
+
+---
+
+## NATS Event Publishing
+
+`check` and `monitor` both accept an optional `-nats-url` flag. When it's
+set, every step evaluation and every rollback trigger gets published as a
+JSON message to NATS, in addition to the normal stdout report. When it's
+left empty (the default), nothing changes: no connection is attempted and
+the CLI behaves exactly as it did before this flag existed.
+
+```bash
+rollout-sentinel monitor --service retail-checkout-api --namespace production --nats-url nats://127.0.0.1:4222
+```
+
+Subjects are per-service so a subscriber can filter or wildcard by service:
+
+- `rollout-sentinel.<service>.step`: published once per step, pass or fail.
+- `rollout-sentinel.<service>.rollback`: published in addition to the step event, the moment a rollback is triggered.
+
+Watch it live with the NATS CLI:
+
+```bash
+nats sub "rollout-sentinel.retail-checkout-api.>"
+```
+
+Step event payload:
+
+```json
+{
+  "timestamp": "2026-08-27T07:22:10Z",
+  "service": "retail-checkout-api",
+  "namespace": "production",
+  "weight_percent": 20,
+  "verdict": "BREACH",
+  "summary": "SLO Breach: One or more critical quality gates failed at 20% traffic weight.",
+  "gate_results": [
+    {
+      "gate_name": "ErrorRateGate",
+      "passed": false,
+      "actual_value": 2.418,
+      "threshold": 0.5,
+      "details": "Canary 5xx rate: 2.418% (Max allowed: 0.500%)"
+    }
+  ]
+}
+```
+
+Rollback event payload:
+
+```json
+{
+  "timestamp": "2026-08-27T07:22:10Z",
+  "service": "retail-checkout-api",
+  "namespace": "production",
+  "weight_percent": 20,
+  "verdict": "BREACH",
+  "reason": "SLO Breach: One or more critical quality gates failed at 20% traffic weight."
+}
+```
+
+The publisher lives in `pkg/notify` behind a small `EventPublisher`
+interface, so wiring in a different sink later (Kafka, a webhook, whatever)
+means implementing that interface, not touching the analyzer or CLI code.
 
 ---
 

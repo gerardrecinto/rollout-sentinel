@@ -3,51 +3,66 @@ package analyzer
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
 	"github.com/gerardrecinto/rollout-sentinel/pkg/client"
 	"github.com/gerardrecinto/rollout-sentinel/pkg/config"
 	"github.com/gerardrecinto/rollout-sentinel/pkg/evaluator"
+	"github.com/gerardrecinto/rollout-sentinel/pkg/notify"
 	"github.com/gerardrecinto/rollout-sentinel/pkg/triage"
 )
 
 // AnalysisResult holds the consolidated outcome of a rollout health inspection cycle.
 type AnalysisResult struct {
-	Timestamp          time.Time                    `json:"timestamp"`
-	ServiceName        string                       `json:"service_name"`
-	Namespace          string                       `json:"namespace"`
-	Evaluation         *evaluator.CanaryEvaluation  `json:"evaluation"`
+	Timestamp           time.Time                   `json:"timestamp"`
+	ServiceName         string                      `json:"service_name"`
+	Namespace           string                      `json:"namespace"`
+	Evaluation          *evaluator.CanaryEvaluation `json:"evaluation"`
 	UnhealthyPodTriages []*triage.TriageResult      `json:"unhealthy_pod_triages"`
-	LLMAnalysis        *triage.LLMTriageResponse    `json:"llm_analysis,omitempty"`
-	ActionTaken        string                       `json:"action_taken"`
-	RollbackTriggered  bool                         `json:"rollback_triggered"`
+	LLMAnalysis         *triage.LLMTriageResponse   `json:"llm_analysis,omitempty"`
+	ActionTaken         string                      `json:"action_taken"`
+	RollbackTriggered   bool                        `json:"rollback_triggered"`
 }
 
 // Controller orchestrates the canary health lifecycle.
 type Controller struct {
-	cfg        config.CanaryConfig
-	k8sClient  client.K8sClient
-	metrics    client.MetricsProvider
-	llmClient  triage.LLMClient
+	cfg       config.CanaryConfig
+	k8sClient client.K8sClient
+	metrics   client.MetricsProvider
+	llmClient triage.LLMClient
+	publisher notify.EventPublisher
 }
 
-// NewController creates a new Controller instance.
+// NewController creates a new Controller instance. Event publishing defaults
+// to notify.NoopPublisher; call SetPublisher to wire in a real sink such as
+// notify.NATSPublisher.
 func NewController(cfg config.CanaryConfig, k8s client.K8sClient, metrics client.MetricsProvider, llm triage.LLMClient) *Controller {
 	return &Controller{
 		cfg:       cfg,
 		k8sClient: k8s,
 		metrics:   metrics,
 		llmClient: llm,
+		publisher: notify.NoopPublisher{},
 	}
+}
+
+// SetPublisher swaps in an EventPublisher for step and rollback events. A nil
+// publisher is treated as notify.NoopPublisher.
+func (c *Controller) SetPublisher(p notify.EventPublisher) {
+	if p == nil {
+		p = notify.NoopPublisher{}
+	}
+	c.publisher = p
 }
 
 // RunStepAnalysis executes one complete cycle of progressive rollout evaluation.
 func (c *Controller) RunStepAnalysis(ctx context.Context, currentWeight int) (*AnalysisResult, error) {
 	result := &AnalysisResult{
-		Timestamp:          time.Now(),
-		ServiceName:        c.cfg.ServiceName,
-		Namespace:          c.cfg.Namespace,
+		Timestamp:           time.Now(),
+		ServiceName:         c.cfg.ServiceName,
+		Namespace:           c.cfg.Namespace,
 		UnhealthyPodTriages: make([]*triage.TriageResult, 0),
 	}
 
@@ -102,7 +117,14 @@ func (c *Controller) RunStepAnalysis(ctx context.Context, currentWeight int) (*A
 		}
 	}
 
-	// 5. Decision & Remediation logic
+	// 5. Publish the step event regardless of verdict, so subscribers see
+	// every evaluation, not just failures. A publish failure never fails
+	// the analysis itself, it's just logged to stderr.
+	if pubErr := c.publisher.PublishStep(ctx, stepEventFromResult(result)); pubErr != nil {
+		fmt.Fprintf(os.Stderr, "warning: failed publishing step event: %v\n", pubErr)
+	}
+
+	// 6. Decision & Remediation logic
 	switch eval.Verdict {
 	case evaluator.VerdictPass:
 		nextWeight := currentWeight + c.cfg.StepWeightPercent
@@ -122,6 +144,18 @@ func (c *Controller) RunStepAnalysis(ctx context.Context, currentWeight int) (*A
 		result.ActionTaken = "SLO breach detected. Executing immediate zero-downtime rollback to baseline."
 		_ = c.k8sClient.TriggerRollback(ctx, c.cfg.Namespace, c.cfg.ServiceName)
 		result.RollbackTriggered = true
+
+		rollbackEvent := notify.RollbackEvent{
+			Timestamp: result.Timestamp,
+			Service:   c.cfg.ServiceName,
+			Namespace: c.cfg.Namespace,
+			Weight:    currentWeight,
+			Verdict:   string(eval.Verdict),
+			Reason:    eval.Summary,
+		}
+		if pubErr := c.publisher.PublishRollback(ctx, rollbackEvent); pubErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed publishing rollback event: %v\n", pubErr)
+		}
 
 		// Run AI / LLM root cause synthesis
 		if c.cfg.EnableLLMTriage && c.llmClient != nil {
@@ -144,4 +178,31 @@ func (c *Controller) RunStepAnalysis(ctx context.Context, currentWeight int) (*A
 	}
 
 	return result, nil
+}
+
+// stepEventFromResult converts an AnalysisResult into the notify package's
+// wire schema for a single step evaluation.
+func stepEventFromResult(result *AnalysisResult) notify.StepEvent {
+	event := notify.StepEvent{
+		Timestamp: result.Timestamp,
+		Service:   result.ServiceName,
+		Namespace: result.Namespace,
+	}
+	if result.Evaluation == nil {
+		return event
+	}
+	event.Weight = result.Evaluation.CanaryWeight
+	event.Verdict = string(result.Evaluation.Verdict)
+	event.Summary = result.Evaluation.Summary
+	event.GateResults = make([]notify.GateResult, 0, len(result.Evaluation.GateResults))
+	for _, g := range result.Evaluation.GateResults {
+		event.GateResults = append(event.GateResults, notify.GateResult{
+			GateName:    g.GateName,
+			Passed:      g.Passed,
+			ActualValue: g.ActualValue,
+			Threshold:   g.Threshold,
+			Details:     g.Details,
+		})
+	}
+	return event
 }
