@@ -6,11 +6,18 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+
 jobs:
   test:
-    name: Test & Auto-Remediate
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
+    name: Tests and demo safety (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -25,8 +32,12 @@ jobs:
         run: |
           CGO_ENABLED=0 go build -v -ldflags="-s -w" -o bin/rollout-sentinel ./cmd/sentinel
 
+      - name: Vet source
+        run: go vet ./...
+
       - name: Run unit and race tests
         id: test_step
+        shell: bash
         run: |
           go test -v -race -coverprofile=coverage.txt -covermode=atomic ./... 2>&1 | tee test.log
 
@@ -34,7 +45,7 @@ jobs:
         if: failure() && steps.test_step.outcome == 'failure'
         run: |
           echo "Test failure detected. Running rollout-sentinel AI triage engine..."
-          ./bin/rollout-sentinel triage --pod ci-worker-test --reason TestFailure --exit-code 1 > triage_report.txt || true
+          ./bin/rollout-sentinel triage --demo --pod ci-worker-test --reason TestFailure --exit-code 1 > triage_report.txt || true
           cat triage_report.txt
 
       - name: Upload test and triage artifacts
@@ -51,9 +62,9 @@ jobs:
       - name: Verify CLI subcommands
         run: |
           ./bin/rollout-sentinel version
-          ./bin/rollout-sentinel check --service retail-checkout-api --namespace production
-          ./bin/rollout-sentinel monitor --service retail-checkout-api --namespace production --steps 2
-          ./bin/rollout-sentinel triage --pod retail-api-test-pod --reason OOMKilled --exit-code 137
+          ./bin/rollout-sentinel check --demo --service retail-checkout-api --namespace production
+          ./bin/rollout-sentinel monitor --demo --service retail-checkout-api --namespace production --steps 2
+          ./bin/rollout-sentinel triage --demo --pod retail-api-test-pod --reason OOMKilled --exit-code 137
 
   docker-build:
     name: Docker Multi-Stage Build

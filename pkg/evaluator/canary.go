@@ -2,6 +2,7 @@ package evaluator
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/gerardrecinto/rollout-sentinel/pkg/client"
 	"github.com/gerardrecinto/rollout-sentinel/pkg/config"
@@ -25,11 +26,11 @@ type GateResult struct {
 }
 
 type CanaryEvaluation struct {
-	Verdict        Verdict               `json:"verdict"`
-	CanaryWeight   int                   `json:"canary_weight_percent"`
-	Summary        string                `json:"summary"`
-	GateResults    []GateResult          `json:"gate_results"`
-	CanarySnapshot *client.MetricSnapshot `json:"canary_snapshot"`
+	Verdict          Verdict                `json:"verdict"`
+	CanaryWeight     int                    `json:"canary_weight_percent"`
+	Summary          string                 `json:"summary"`
+	GateResults      []GateResult           `json:"gate_results"`
+	CanarySnapshot   *client.MetricSnapshot `json:"canary_snapshot"`
 	BaselineSnapshot *client.MetricSnapshot `json:"baseline_snapshot"`
 }
 
@@ -47,6 +48,21 @@ func EvaluateCanary(cfg config.CanaryConfig, canary, baseline *client.MetricSnap
 		eval.Verdict = VerdictAbort
 		eval.Summary = "Critical: Canary metric snapshot is missing"
 		return eval
+	}
+	for _, snapshot := range []*client.MetricSnapshot{canary, baseline} {
+		if snapshot == nil {
+			continue
+		}
+		invalid := snapshot.TotalRequests < 0 || snapshot.ErrorCount5xx < 0
+		for _, value := range []float64{snapshot.ErrorRatePercent, snapshot.P50LatencyMs,
+			snapshot.P95LatencyMs, snapshot.P99LatencyMs, snapshot.AvgCpuPercent, snapshot.AvgMemoryPercent} {
+			invalid = invalid || math.IsNaN(value) || math.IsInf(value, 0) || value < 0
+		}
+		if invalid {
+			eval.Verdict = VerdictAbort
+			eval.Summary = "Critical: Metric snapshot contains negative or non-finite values"
+			return eval
+		}
 	}
 
 	// 1. Error Rate Gate

@@ -1,211 +1,74 @@
 # rollout-sentinel
 
-![CI](https://github.com/gerardrecinto/rollout-sentinel/actions/workflows/ci.yml/badge.svg)
-![Release](https://github.com/gerardrecinto/rollout-sentinel/actions/workflows/release.yml/badge.svg)
-![Go](https://img.shields.io/badge/Go-1.23+-00ADD8?logo=go&logoColor=white)
-![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS-lightgrey)
-![Tests](https://img.shields.io/badge/tests-passing-brightgreen)
-![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)
+[![CI](https://github.com/gerardrecinto/rollout-sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/gerardrecinto/rollout-sentinel/actions/workflows/ci.yml)
 
-![rollout-sentinel logo](docs/assets/logo.svg)
+A Go simulator for canary release decisions and pod failure triage. It is for platform and release engineers who want to inspect and test the decision logic before building a live integration.
 
-> Automated canary gate verification and sub-minute incident triage.
+**The CLI uses synthetic metrics, a mock Kubernetes client and canned incident synthesis. It does not query Prometheus, change real traffic or roll back a real deployment.**
 
-Progressive delivery and canary health evaluation CLI for Kubernetes and Prometheus. Evaluates error budgets, p99 latency SLA gates, and container resource saturation during traffic step cutovers, triggering automated rollbacks upon consecutive SLO breaches.
+[Try the browser demo](https://gerardrecinto.github.io/rollout-sentinel/) or run the same evaluator locally.
 
-![demo](docs/assets/demo.gif)
+## Quick start
 
----
-
-## What it does
-
-- Evaluates live canary metric snapshots against baseline pods across 5 distinct SLO quality gates: HTTP 5xx error rate, relative error degradation, p99 latency threshold, latency drift percentage, and cgroup CPU/memory saturation.
-- Halts traffic promotion and triggers automated rollback within 2 minutes of consecutive SLA breaches.
-- Deterministic fast-path failure classifier for exit code 137 OOMKilled, CrashLoopBackOff, ImagePullBackOff, and probe timeouts (&lt; 0.4ms execution latency).
-- LLM incident triage engine that correlates Kubernetes pod events, container stderr logs, and Prometheus metrics diffs to generate actionable hypotheses and immediate runbook remediation steps.
-
----
-
-## What it looks like in practice
-
-```text
-$ rollout-sentinel monitor --service retail-checkout-api --namespace production
-
---- [STEP 1/3] Evaluating canary at 10% traffic weight ---
-Status Verdict:  [PASS]
-Action:          ADVANCE_TRAFFIC_STEP -> Promoting canary to 20%
-Summary:         All 5 SLO gates passed at 10% traffic weight.
-Quality Gates (5 evaluated):
-  [PASS] ErrorRateGate                -> Canary 5xx rate: 0.012% (Max allowed: 0.500%)
-  [PASS] P99LatencyGate               -> Canary p99 latency: 142.4ms (Max SLA: 500.0ms)
-  [PASS] LatencyDriftGate             -> Canary latency drift: +4.2% compared to baseline (142.4ms vs 136.6ms)
-  [PASS] CpuSaturationGate            -> Canary CPU saturation: 32.1% (Threshold: 80.0%)
-  [PASS] MemorySaturationGate         -> Canary memory saturation: 48.2% (Threshold: 85.0%)
-
---- [STEP 2/3] Evaluating canary at 20% traffic weight ---
-Status Verdict:  [BREACH]
-Action:          TRIGGER_AUTOMATED_ROLLBACK -> Executing kubectl rollout undo (MTTR: 2m)
-Summary:         SLO Breach: One or more critical quality gates failed at 20% traffic weight.
-Quality Gates (5 evaluated):
-  [FAIL] ErrorRateGate                -> Canary 5xx rate: 2.418% (Max allowed: 0.500%)
-  [FAIL] RelativeErrorDegradationGate -> Canary error rate elevated by +2.404% over baseline (2.418% vs 0.014%)
-  [PASS] P99LatencyGate               -> Canary p99 latency: 188.0ms (Max SLA: 500.0ms)
-  [PASS] LatencyDriftGate             -> Canary latency drift: +18.4% compared to baseline (188.0ms vs 158.8ms)
-  [PASS] MemorySaturationGate         -> Canary memory saturation: 62.4% (Threshold: 85.0%)
-
-================================================================================
-                  ROLLOUT-SENTINEL: POD FAILURE TRIAGE ENGINE                   
-================================================================================
-Target Pod:      retail-checkout-api-canary-7f8d-x9
-Failure Reason:  OOMKilled (Exit Code: 137)
-
-[1] DETERMINISTIC RULE CLASSIFIER:
-    Category:       OOMKilled
-    Confidence:     99.0%
-    Root Cause:     Container exceeded cgroup memory limit (Exit Code 137).
-    Remediation:    Inspect memory profile, increase pod memory limits, and check for heap buffer leaks.
-
-[2] AI / LLM ROOT-CAUSE SYNTHESIS:
-    Title:          Production Incident: retail-checkout-api Canary OOM Spike
-    Summary:        Canary pod terminated via SIGKILL after exceeding cgroup memory boundary during 20% traffic ramp.
-    Hypothesis:     Synchronous telemetry buffer accumulation in request handler causing unbounded heap growth under load.
-    Rollback Recom: true
-    Immediate Actions:
-      - Confirm automated rollback execution to baseline version v2.13.9.
-      - Profile heap allocation under load in staging environment.
-      - Implement backpressure and bound in-memory event queues.
-================================================================================
-```
-
----
-
-## Architecture
-
-```text
-                 +-----------------------------------------------+
-                 |              Kubernetes Ingress               |
-                 |     [Traffic Split: 90% Baseline / 10% Canary]|
-                 +-----------------------+-----------------------+
-                                         |
-                     +-------------------+-------------------+
-                     |                                       |
-                     v                                       v
-         +-----------------------+               +-----------------------+
-         | Baseline Deployment   |               |   Canary Deployment   |
-         | (v2.13.9 - 10 Pods)   |               |   (v2.14.0 - 2 Pods)  |
-         +-----------+-----------+               +-----------+-----------+
-                     |                                       |
-                     +-------------------+-------------------+
-                                         | (PromQL Scrape)
-                                         v
-                         +-------------------------------+
-                         |      Prometheus Telemetry     |
-                         |   (Error Rate, P99, CPU/Mem)  |
-                         +---------------+---------------+
-                                         |
-                                         v
-                   +---------------------------------------------+
-                   |              rollout-sentinel               |
-                   | +-----------------------------------------+ |
-                   | |  Evaluator: 5-Gate SLO Verification     | |
-                   | +-----------------------------------------+ |
-                   | |  Triage: Fast-path Classifier + LLM     | |
-                   | +-----------------------------------------+ |
-                   +---------------------+-----------------------+
-                                         |
-                     +-------------------+-------------------+
-                     | (Verdict == PASS)                     | (Verdict == BREACH)
-                     v                                       v
-         +-----------------------+               +-----------------------+
-         | Advance Traffic Step  |               | Trigger Auto Rollback |
-         |   (10% -> 20% -> 50%) |               | & Emit Triage Summary |
-         +-----------------------+               +-----------------------+
-```
-
----
-
-## CLI Usage
-
-### 1. One-Shot Canary Verification
-```bash
-rollout-sentinel check --service retail-checkout-api --namespace production --weight 10
-```
-
-### 2. Progressive Deployment Monitoring Loop
-```bash
-rollout-sentinel monitor --service retail-checkout-api --namespace production --steps 3
-```
-
-### 3. Automated Pod Failure Triage
-```bash
-rollout-sentinel triage --pod retail-checkout-api-canary-7f8d-x9 --reason OOMKilled --exit-code 137
-```
-
----
-
-## Docker Container
-
-Multi-stage build with non-root security context:
-
-```bash
-# Build image
-docker build -t ghcr.io/gerardrecinto/rollout-sentinel:v1.0.0 .
-
-# Run check in container
-docker run --rm ghcr.io/gerardrecinto/rollout-sentinel:v1.0.0 check --service checkout-api --namespace prod --weight 20
-```
-
----
-
-## ArgoCD and Argo Rollouts GitOps
-
-Manifests are located in `deploy/`:
-
-- `deploy/argocd/application.yaml`: ArgoCD Application CRD with automated self-healing and pruning.
-- `deploy/argo-rollouts/analysis-template.yaml`: AnalysisTemplate running `rollout-sentinel check` at each traffic step.
-- `deploy/argo-rollouts/rollout.yaml`: Argo Rollout with canary step progression (10% -> 20% -> 50% -> 100%).
-- `deploy/kyverno/verify-image-signature.yaml`: Kyverno ClusterPolicy that blocks any pod using a `rollout-sentinel` image unless it carries a valid keyless Cosign signature from this repo's own release workflow.
-
-Every image gets signed in `.github/workflows/release.yml` right after it's pushed to `ghcr.io`, keyless, tied to the workflow's own GitHub Actions OIDC identity, no signing key to manage or leak. The same workflow re-verifies the signature it just wrote before calling the job done. The Kyverno policy above does the same check again, independently, at the cluster's admission boundary, so a signed-but-later-tampered image, or an image pushed by anything other than this exact release workflow, gets refused at schedule time even if it somehow made it past CI.
-
-Apply to cluster:
-```bash
-kubectl apply -f deploy/argocd/application.yaml
-```
-
----
-
-## Benchmarks
-
-- **Canary Step Evaluation Overhead:** &lt; 12ms (concurrent metric fetch + multi-gate evaluation)
-- **Deterministic Rule Classifier:** &lt; 0.4ms execution latency
-- **Memory Footprint:** &lt; 18MB RSS at peak monitoring throughput
-
----
-
-## Installation
-
-### Download binary (macOS)
-
-Download the latest release tarball from [Releases](https://github.com/gerardrecinto/rollout-sentinel/releases):
-
-```bash
-curl -L https://github.com/gerardrecinto/rollout-sentinel/releases/latest/download/rollout-sentinel_v1.0.0_darwin_arm64.tar.gz -o rollout-sentinel.tar.gz
-tar -xzf rollout-sentinel.tar.gz
-chmod +x rollout-sentinel-darwin-arm64
-mv rollout-sentinel-darwin-arm64 /usr/local/bin/rollout-sentinel
-```
-
-### Build from source
+Needs Git and Go 1.23 or later. These commands do not need a cluster, cloud account, model key or credentials.
 
 ```bash
 git clone https://github.com/gerardrecinto/rollout-sentinel.git
 cd rollout-sentinel
 go build -ldflags="-s -w" -o bin/rollout-sentinel ./cmd/sentinel
+./bin/rollout-sentinel check --demo --json
+./bin/rollout-sentinel monitor --demo --steps 2
+./bin/rollout-sentinel triage --demo --pod example-pod --reason OOMKilled --exit-code 137
 ```
 
----
+The healthy sample produces a `PASS` verdict and a simulated traffic advance. Simulation warnings go to stderr, so `check --demo --json` keeps stdout valid JSON. Commands that would otherwise run mock actions require `--demo`; without it, they exit 2 instead of acting as a fake production health gate.
 
-## Author
+`triage --demo` uses sample logs and events. Its incident synthesis is a fixed test response, not a diagnosis from a connected model. Rule confidence values are heuristic constants, not calibrated probabilities.
 
-Gerard Recinto: [GitHub](https://github.com/gerardrecinto) | [LinkedIn](https://linkedin.com/in/gerardrecinto)
+## What is implemented
+
+| Component | Current behavior |
+| --- | --- |
+| Go evaluator | Checks absolute and relative 5xx error rates, p99 latency, latency drift, CPU and memory against configured thresholds. |
+| Controller | Fetches snapshots concurrently. Requests a traffic advance on PASS, holds on WARN, and requests rollback on BREACH or ABORT through a client interface. Action errors are returned, not reported as successful changes. |
+| Failure classifier | Rules for memory failures, image pulls, probes, missing configuration, database connections, network failures and repeated crashes. |
+| Browser demo | Runs the Go evaluator, controller and classifier as WebAssembly. Its inputs and cluster actions are simulated. |
+| Container and release workflow | Builds a non-root Linux container and four OS/architecture binaries. The image release workflow signs and verifies its published digest using keyless Cosign. |
+| Deployment manifests | Reference Argo CD, Argo Rollouts and Kyverno configuration. These are not a tested production deployment. |
+
+Relative comparisons depend on available baseline data. CPU saturation and latency drift can produce WARN, which holds traffic. Critical error or memory breaches request rollback on that evaluation; a consecutive-failure timer is not implemented. The CLI monitor is a short demonstration loop, not a background controller.
+
+## What is not connected
+
+- No live Prometheus or other metrics client.
+- No live Kubernetes client or traffic router.
+- No external incident-analysis model client.
+- No proven rollback completion time, production service-level agreement or measured fleet throughput.
+- `EvaluationInterval` and `MaxConsecutiveFailures` are configuration fields, not an implemented scheduling or consecutive-failure policy.
+
+The interfaces in `pkg/client/` and `pkg/triage/` are extension points. Implementing an interface is only one part of a live integration; authentication, authorization, missing data, timeouts and deployment verification still need testing.
+
+## Tests
+
+```bash
+go test -race -coverprofile=coverage.txt ./...
+go vet ./...
+```
+
+CI builds the binary, runs race tests and vet on Linux and macOS, verifies the demo guard and JSON output, and builds the container. Tests include rejected action requests and missing rollout status. The repository does not currently enforce reproducible latency or RSS benchmark thresholds.
+
+## Installation alternatives
+
+The quick start builds the source you checked out. Prebuilt archives and checksums are listed on [Releases](https://github.com/gerardrecinto/rollout-sentinel/releases). Select the archive for the actual release tag, operating system and architecture. Compare its checksum with that release's `checksums.txt` before using it. No privileged global installation is required to run a downloaded binary from its extraction directory.
+
+## Deployment references
+
+`deploy/` contains Argo CD, Argo Rollouts and Kyverno examples. **Do not apply them as a live canary health gate.** The CLI has no live backend and refuses checks without explicit `--demo`. Adding that flag to a production gate would evaluate synthetic healthy data rather than your service.
+
+The Kyverno policy describes keyless signature admission for this repository's release workflow. Whether it is installed and enforced on a cluster must be verified separately. A signed image is not evidence that its metrics or rollback behavior are production-ready.
+
+## Security and license
+
+Report vulnerabilities privately using [SECURITY.md](SECURITY.md). Avoid including credentials or private workload logs in public reports.
+
+License terms have not been specified in a `LICENSE` file.

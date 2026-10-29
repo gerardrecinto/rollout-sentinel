@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"runtime"
 	"time"
 
 	"github.com/gerardrecinto/rollout-sentinel/pkg/analyzer"
@@ -26,7 +27,7 @@ func main() {
 
 	switch command {
 	case "version":
-		fmt.Printf("rollout-sentinel %s (darwin/arm64, Go 1.23+)\n", Version)
+		fmt.Printf("rollout-sentinel %s (%s/%s, %s)\n", Version, runtime.GOOS, runtime.GOARCH, runtime.Version())
 
 	case "check":
 		runCheck(os.Args[2:])
@@ -44,8 +45,17 @@ func main() {
 	}
 }
 
+func requireDemo(enabled bool) {
+	if !enabled {
+		fmt.Fprintln(os.Stderr, "This command has no live backend. Pass --demo to use synthetic metrics and mock actions; do not use it as a production rollout gate.")
+		os.Exit(2)
+	}
+	fmt.Fprintln(os.Stderr, "Simulation only: synthetic metrics, mock cluster actions, and canned incident synthesis. No live system is contacted.")
+}
+
 func printUsage() {
-	fmt.Println("rollout-sentinel - Cloud-Native Progressive Delivery & Canary Health Sentinel")
+	fmt.Println("rollout-sentinel - canary evaluation and triage simulator")
+	fmt.Println("Simulation only: no live Kubernetes, Prometheus, or model adapter is connected.")
 	fmt.Println("\nUsage:")
 	fmt.Println("  rollout-sentinel <command> [flags]")
 	fmt.Println("\nAvailable Commands:")
@@ -57,11 +67,13 @@ func printUsage() {
 
 func runCheck(args []string) {
 	fs := flag.NewFlagSet("check", flag.ExitOnError)
+	demo := fs.Bool("demo", false, "Explicitly run synthetic metrics and mock Kubernetes actions")
 	service := fs.String("service", "retail-checkout-api", "Target Kubernetes service name")
 	namespace := fs.String("namespace", "production", "Target Kubernetes namespace")
 	weight := fs.Int("weight", 10, "Current canary traffic weight percent")
 	jsonOutput := fs.Bool("json", false, "Output results in JSON format")
 	_ = fs.Parse(args)
+	requireDemo(*demo)
 
 	cfg := config.DefaultConfig()
 	cfg.ServiceName = *service
@@ -89,10 +101,12 @@ func runCheck(args []string) {
 
 func runMonitor(args []string) {
 	fs := flag.NewFlagSet("monitor", flag.ExitOnError)
+	demo := fs.Bool("demo", false, "Explicitly run the simulated monitoring loop")
 	service := fs.String("service", "retail-checkout-api", "Target Kubernetes service name")
 	namespace := fs.String("namespace", "production", "Target Kubernetes namespace")
 	maxSteps := fs.Int("steps", 3, "Maximum canary progression steps to simulate")
 	_ = fs.Parse(args)
+	requireDemo(*demo)
 
 	cfg := config.DefaultConfig()
 	cfg.ServiceName = *service
@@ -110,7 +124,7 @@ func runMonitor(args []string) {
 		res, err := ctrl.RunStepAnalysis(context.Background(), currentWeight)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Step failure: %v\n", err)
-			break
+			os.Exit(1)
 		}
 		printReport(res)
 
@@ -130,10 +144,12 @@ func runMonitor(args []string) {
 
 func runTriage(args []string) {
 	fs := flag.NewFlagSet("triage", flag.ExitOnError)
+	demo := fs.Bool("demo", false, "Explicitly use sample pod logs and canned triage")
 	podName := fs.String("pod", "retail-checkout-api-canary-7f8d-x9", "Pod name to diagnose")
 	reason := fs.String("reason", "OOMKilled", "Reported pod failure reason")
 	exitCode := fs.Int("exit-code", 137, "Pod exit code")
 	_ = fs.Parse(args)
+	requireDemo(*demo)
 
 	pod := client.PodInfo{
 		Name:         *podName,
