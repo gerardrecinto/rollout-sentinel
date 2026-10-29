@@ -10,6 +10,7 @@
 <meta property="og:type" content="website">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23f59e0b'/%3E%3Ccircle cx='16' cy='16' r='6' fill='none' stroke='%23fff' stroke-width='3'/%3E%3C/svg%3E">
 <style>
+[hidden]{display:none!important}
 
 :root{--bg:#f8fafc;--panel:#fff;--panel2:#f1f5f9;--line:#e2e8f0;--fg:#0f172a;--mute:#475569;--brand:#b45309;--brand-bg:#fef3c7;--ok:#047857;--ok-bg:#d1fae5;--err:#b91c1c;--err-bg:#fee2e2;--code:#0b1220;--code-fg:#e2e8f0}
 @media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#070d1a;--panel:#0d1526;--panel2:#111c33;--line:#1e2b47;--fg:#e8eefc;--mute:#9fb0cc;--brand:#fbbf24;--brand-bg:#3a2a07;--ok:#34d399;--ok-bg:#06382b;--err:#fca5a5;--err-bg:#3b1212}}
@@ -30,7 +31,7 @@ nav .links a:hover{color:var(--fg)}
 .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:10px;font-weight:600;text-decoration:none;border:1px solid var(--line);color:var(--fg);background:var(--panel);cursor:pointer;font-size:15px}
 .btn.primary{background:#f59e0b;border-color:#f59e0b;color:#2b1a00}
 .btn.primary:hover{background:#fbbf24}
-.btn:focus-visible,textarea:focus-visible,button:focus-visible,a:focus-visible{outline:2px solid #f59e0b;outline-offset:2px}
+.btn:focus-visible,textarea:focus-visible,button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,pre:focus-visible{outline:2px solid #f59e0b;outline-offset:2px}
 .hero{padding:72px 0 40px;text-align:center}
 .pill{display:inline-block;font-size:13px;color:var(--brand);background:var(--brand-bg);padding:4px 12px;border-radius:99px;margin-bottom:20px;font-weight:600}
 h1{font-size:clamp(34px,6vw,58px);line-height:1.08;margin:0 0 18px;letter-spacing:-.02em}
@@ -119,27 +120,30 @@ footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
 </style>
 </head>
 <body>
-<nav><div class="wrap">
+<nav aria-label="Primary"><div class="wrap">
   <a class="logo" href="#top"><i></i>rollout-sentinel</a>
   <div class="links"><a href="#try" class="hide-s">Try it</a><a href="#install" class="hide-s">Install</a><a class="btn" href="https://github.com/gerardrecinto/rollout-sentinel">GitHub</a></div>
 </div></nav>
 
 <header class="hero" id="top"><div class="wrap">
   <h1>A canary that breaks an SLO should <em>roll itself back</em>.</h1>
-  <p class="lede">Progressive delivery for Kubernetes and Prometheus. Five quality gates compare a canary to its baseline at every traffic step, halt on breach, and a classifier names the failing pod in under a millisecond.</p>
+  <p class="lede">A Go simulator for platform and release engineers. Compare a canary with its baseline, explore warnings and breaches, and inspect pod failure rules. The metrics and cluster actions here are simulated.</p>
   <div class="cta"><a class="btn primary" href="#try">Gate a canary</a><a class="btn" href="#install">Run it</a></div>
-  <div class="stats"><div><b>5</b>SLO gates</div><div><b>4</b>verdicts: pass, warn, breach, abort</div><div><b>0</b>clusters touched here</div></div>
+  <div class="stats"><div><b>Go</b>evaluator in your browser</div><div><b>4</b>verdicts: pass, warn, breach, abort</div><div><b>0</b>clusters touched here</div></div>
 </div></header>
 
 
 <section id="try"><div class="wrap">
   <h2>Gate a canary</h2>
   <p class="sub">This is the real Go evaluator, controller and failure classifier, compiled to WebAssembly and running in your browser. The cluster, metrics and Kubernetes API are simulated by the repo's own mock clients, so nothing here touches a real system.</p>
+  <p><button class="btn primary" id="start-demo" type="button" aria-controls="out" hidden>Start interactive demo</button></p>
+  <p class="note">The Go engine downloads only after you start. You can read the explanation and run the local commands without loading it.</p>
+  <noscript><p>This interactive demo needs JavaScript. <a href="#install">Run the same Go evaluator locally</a> or read the explanation below.</p></noscript>
   <div class="lab">
     <div class="card">
       <h3><span>Canary vs baseline <span class="sim">SIMULATED</span></span><span class="tools" id="pre" role="group" aria-label="Scenario"></span></h3>
       <div class="rg" id="sl"></div>
-      <div class="rp"><button class="btn primary" id="run" type="button">Evaluate this step</button><button class="btn" id="ramp" type="button">Ramp 10% to 100%</button></div>
+      <div class="rp"><button class="btn primary" id="run" type="button" disabled>Evaluate this step</button><button class="btn" id="ramp" type="button" disabled>Ramp 10% to 100%</button></div>
       <div class="pod">
         <label><input type="checkbox" id="pod-on" style="width:auto;margin:0 6px 0 0"> Include an unhealthy canary pod</label>
         <div id="pod-f" hidden>
@@ -150,16 +154,16 @@ footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
         </div>
       </div>
     </div>
-    <div class="card" id="out" aria-live="polite"><h3><span>Decision</span></h3><div class="status" id="boot">Loading the Go engine (about 4 MB)...</div></div>
+    <div class="card" id="out" aria-live="polite" aria-busy="false"><h3><span>Decision</span></h3><div class="status" id="boot" role="status">Start the demo to load the real Go evaluator.</div></div>
   </div>
-  <p class="note">The repo's LLM triage is a mock that returns a canned answer, so this page does not show it. The deterministic classifier and the five gates are the real code.</p>
+  <p class="note">The repo's LLM triage is a mock that returns a canned answer, so this page does not show it. The deterministic classifier and evaluator are the real code. Confidence values are heuristic constants, not calibrated probabilities.</p>
 </div></section>
 
 <section><div class="wrap">
   <h2>How it works</h2>
   <p class="sub">A canary should be judged against the version it replaces, not only against fixed limits.</p>
   <div class="steps">
-    <div class="step"><div class="n">1</div><h3>Five gates</h3><p>Error rate, error rate against baseline, p99 latency, latency drift and CPU or memory saturation. Any breach halts the rollout and rolls back.</p></div>
+    <div class="step"><div class="n">1</div><h3>Compare the signals</h3><p>Error rate, error rate against baseline, p99 latency, latency drift and CPU or memory saturation. A breach requests a mock rollback; warnings hold simulated traffic.</p></div>
     <div class="step"><div class="n">2</div><h3>Warn is not breach</h3><p>Latency drift over 30% or high CPU holds traffic at the current weight. Memory over its limit, or an unhealthy pod, is a breach.</p></div>
     <div class="step"><div class="n">3</div><h3>Name the failure fast</h3><p>A rule classifier reads pod reason, exit code, logs and events and labels OOMKilled, image pull, probe, config, database, network and crash loops.</p></div>
   </div>
@@ -170,16 +174,16 @@ footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
   <p class="sub">Go 1.23 or later. The CLI uses the same mocks as this page until you wire it to Prometheus and a cluster.</p>
   <div class="cols2">
     <div>
-<pre>git clone https://github.com/gerardrecinto/rollout-sentinel
+<pre tabindex="0">git clone https://github.com/gerardrecinto/rollout-sentinel
 cd rollout-sentinel
 go build -o rollout-sentinel ./cmd/sentinel
 
-./rollout-sentinel monitor --service retail-checkout-api
-./rollout-sentinel triage --reason OOMKilled --exit-code 137</pre>
+./rollout-sentinel monitor --demo --service retail-checkout-api
+./rollout-sentinel triage --demo --reason OOMKilled --exit-code 137</pre>
     </div>
     <div>
-<pre>go test ./...</pre>
-      <p class="note">See the README for the Kubernetes and Prometheus wiring and the deploy manifests.</p>
+<pre tabindex="0">go test ./...</pre>
+      <p class="note">The README separates tested simulation code from the live integrations that are not implemented.</p>
     </div>
   </div>
 </div></section>
@@ -198,7 +202,6 @@ go build -o rollout-sentinel ./cmd/sentinel
   <span><a href="https://github.com/gerardrecinto/rollout-sentinel">Source</a> &middot; <a href="https://github.com/gerardrecinto/rollout-sentinel/releases">Releases</a></span>
 </div></footer>
 
-<script src="wasm_exec.js"></script>
 <script>
 
 (() => {
@@ -252,14 +255,40 @@ go build -o rollout-sentinel ./cmd/sentinel
   }
   $("run").addEventListener("click", () => { run(); track("rs_run"); });
   $("ramp").addEventListener("click", ramp);
-  (async () => {
+  const startButton = $("start-demo");
+  const demoButtons = () => document.querySelectorAll("#pre button, #run, #ramp");
+  demoButtons().forEach((button) => { button.disabled = true; });
+  const loadGo = () => new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "wasm_exec.js";
+    script.onload = resolve;
+    script.onerror = () => { script.remove(); reject(new Error("Go support script unavailable")); };
+    document.head.appendChild(script);
+  });
+  startButton.hidden = false;
+  startButton.addEventListener("click", async () => {
+    startButton.disabled = true;
+    $("out").setAttribute("aria-busy", "true");
+    $("boot").textContent = "Loading the Go evaluator. This can take a moment on a slow connection.";
     try {
+      if (typeof Go !== "function") await loadGo();
       const go = new Go();
-      const r = await WebAssembly.instantiateStreaming(fetch("sentinel.wasm"), go.importObject);
-      go.run(r.instance);
+      const response = await fetch("sentinel.wasm");
+      if (!response.ok) throw new Error("Go engine unavailable");
+      const result = await WebAssembly.instantiateStreaming(response, go.importObject);
+      go.run(result.instance);
       run();
-    } catch (e) { $("boot").textContent = "The Go engine did not load (" + e.message + "). The CLI install below runs the same code."; }
-  })();
+      demoButtons().forEach((button) => { button.disabled = false; });
+      startButton.hidden = true;
+      $("s-err").focus();
+    } catch (error) {
+      $("boot").textContent = "The Go engine could not load. Check your connection and retry, or run the local commands below.";
+      startButton.textContent = "Retry interactive demo";
+      startButton.disabled = false;
+    } finally {
+      $("out").setAttribute("aria-busy", "false");
+    }
+  });
 })();
 
 </script>
