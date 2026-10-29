@@ -30,7 +30,7 @@ jobs:
           echo "Diff line count: $(wc -l < "$DIFF_FILE")"
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
