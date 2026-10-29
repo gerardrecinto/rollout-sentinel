@@ -8,22 +8,22 @@ import (
 
 // CanaryConfig defines thresholds and parameters for progressive canary deployment verification.
 type CanaryConfig struct {
-	ServiceName           string        `json:"service_name"`
-	Namespace             string        `json:"namespace"`
-	CanaryVersion         string        `json:"canary_version"`
-	BaselineVersion       string        `json:"baseline_version"`
-	StepWeightPercent     int           `json:"step_weight_percent"`
-	EvaluationInterval    time.Duration `json:"evaluation_interval"`
-	MaxErrorRatePercent   float64       `json:"max_error_rate_percent"`
-	MaxP99LatencyMs       float64       `json:"max_p99_latency_ms"`
-	MaxCpuSaturationPct   float64       `json:"max_cpu_saturation_pct"`
-	MaxMemorySaturationPct float64      `json:"max_memory_saturation_pct"`
-	MaxConsecutiveFailures int          `json:"max_consecutive_failures"`
-	PrometheusURL         string        `json:"prometheus_url"`
-	EnableLLMTriage       bool          `json:"enable_llm_triage"`
+	ServiceName            string        `json:"service_name"`
+	Namespace              string        `json:"namespace"`
+	CanaryVersion          string        `json:"canary_version"`
+	BaselineVersion        string        `json:"baseline_version"`
+	StepWeightPercent      int           `json:"step_weight_percent"`
+	EvaluationInterval     time.Duration `json:"evaluation_interval"`
+	MaxErrorRatePercent    float64       `json:"max_error_rate_percent"`
+	MaxP99LatencyMs        float64       `json:"max_p99_latency_ms"`
+	MaxCpuSaturationPct    float64       `json:"max_cpu_saturation_pct"`
+	MaxMemorySaturationPct float64       `json:"max_memory_saturation_pct"`
+	MaxConsecutiveFailures int           `json:"max_consecutive_failures"`
+	PrometheusURL          string        `json:"prometheus_url"`
+	EnableLLMTriage        bool          `json:"enable_llm_triage"`
 }
 
-// DefaultConfig returns a production-hardened default configuration for high-availability services.
+// DefaultConfig returns example thresholds for the local simulation.
 func DefaultConfig() CanaryConfig {
 	return CanaryConfig{
 		ServiceName:            "retail-checkout-api",
