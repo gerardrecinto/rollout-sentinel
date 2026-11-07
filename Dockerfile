@@ -17,7 +17,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -o /bin/rollout-sentinel ./cmd/sentinel
 
 # Stage 2: Minimal non-root runtime image
-FROM alpine:3.20 AS runner
+FROM alpine:3.24 AS runner
 
 WORKDIR /app
 
