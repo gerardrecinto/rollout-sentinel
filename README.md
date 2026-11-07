@@ -72,3 +72,7 @@ The Kyverno policy describes keyless signature admission for this repository's r
 Report vulnerabilities privately using [SECURITY.md](SECURITY.md). Avoid including credentials or private workload logs in public reports.
 
 License terms have not been specified in a `LICENSE` file.
+
+## Optional evaluation help
+
+For a scoped paid evaluation or implementation inquiry, see [SUPPORT.md](SUPPORT.md). The CLI currently uses simulated data and mock cluster actions.
