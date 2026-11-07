@@ -10,6 +10,31 @@ permissions:
   contents: read
 
 jobs:
+  site:
+    name: Site behavior (${{ matrix.browser }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          cache: npm
+      - run: bash scripts/build-site.sh
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps ${{ matrix.browser }}
+      - name: Verify deferred WASM, real Go decisions, accessibility and retry
+        env:
+          SITE_BROWSER: ${{ matrix.browser }}
+        run: npm run test:site
+
   test:
     name: Tests and demo safety (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

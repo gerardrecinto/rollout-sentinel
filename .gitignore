@@ -12,3 +12,6 @@ coverage.txt
 *.out
 __pycache__/
 *.pyc
+
+_site/
+node_modules/

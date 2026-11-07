@@ -1,0 +1,6 @@
+{
+  "name": "rollout-sentinel-site-checks",
+  "private": true,
+  "scripts": {"test:site": "node --test tests/site.test.mjs"},
+  "devDependencies": {"playwright": "1.63.0", "axe-core": "4.11.0"}
+}
