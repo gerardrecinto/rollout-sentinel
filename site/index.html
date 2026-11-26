@@ -189,11 +189,12 @@ go build -o rollout-sentinel ./cmd/sentinel
 </div></section>
 
 <section><div class="wrap">
-  <div class="limits"><strong>What this does not do</strong><ul>
-    <li>The metrics and cluster in this page are simulated. The repo's CLI demo also runs on mocks.</li>
-    <li>The classifier is regular expressions on text. A message it does not know comes back as an unknown anomaly at 40% confidence.</li>
-    <li>The ramp button scales metrics linearly with traffic weight to show the gate order. Real services do not degrade that smoothly.</li>
-  </ul></div>
+  <div class="limits">
+    <strong>About this demo</strong>
+    <ul>
+      <li>The metrics and cluster in this page are simulated. The repo's CLI demo also runs on mocks.</li>
+    </ul>
+  </div>
 </div></section>
 
 
